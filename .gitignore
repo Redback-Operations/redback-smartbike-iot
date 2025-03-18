@@ -30,3 +30,13 @@
 *.exe
 *.out
 *.app
+
+# Python
+*.pyc
+*.pyo
+*.pyd
+
+
+venv/
+
+*.log

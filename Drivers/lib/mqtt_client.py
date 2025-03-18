@@ -5,7 +5,7 @@ import time
 import paho.mqtt.client as paho
 from paho import mqtt
 import logging
-
+from app_config import MQTT
 # setup logging
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,12 @@ class MQTTClient:
         self.client.on_connect = self.on_connect
 
         # enable TLS for secure connection
-        self.client.tls_set(tls_version=paho.ssl.PROTOCOL_TLS)
+        try:
+            if MQTT['ENVIRONMENT'] != 'dev':
+                self.client.tls_set(tls_version=paho.ssl.PROTOCOL_TLS)
+        except Exception as e:
+            logger.error(f"Error setting up TLS: {e}, refer to app_config.py to set environment to 'prod' for tls connection")
+            sys.exit(1)
         # set username and password
         self.client.username_pw_set(self.username, self.password)
         # Default port 1883
