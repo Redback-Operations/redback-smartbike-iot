@@ -16,7 +16,7 @@ To use:
     - Add/modify any control methods for control topics that are not already present
     - Add the MQTT credentials
     - Run
-    - Enter the corrosponding numbers to select control methods
+    - Enter the corresponding numbers to select control methods
     - Input values to send to control topics
 """
 
@@ -31,67 +31,88 @@ MQTT_PASS = ''
 DEVICE_ID = '000001'
 
 # Testing Controls
-SUBSCRIBED_TOPICS = [] # use '#' for all topics
+SUBSCRIBED_TOPICS = []  # use '#' for all topics
 
 # ===============================
 
-# write topics
-INCLINE_TOPIC = BIKE_01_INCLINE_COMMAND
-RESISTANCE_TOPIC = BIKE_01_RESISTANCE_COMMAND
-FAN_TOPIC = f'bike/{DEVICE_ID}/fan/control'
+# Write topics dynamically for future flexibility
+TOPICS = {
+    "INCLINE": f'bike/{DEVICE_ID}/incline/control',
+    "RESISTANCE": f'bike/{DEVICE_ID}/resistance/control',
+    "FAN": f'bike/{DEVICE_ID}/fan/control',
+    "WORKOUT_SELECTOR": f'bike/{DEVICE_ID}/workout',
+}
 
-# read topics
-BIKE_01_INCLINE_REPORT = 'bike/000001/incline/control'
-BIKE_01_RESISTANCE_REPORT = 'bike/000001/resistance/report'
-BIKE_01_SPEED_REPORT = 'bike/000001/speed'
-BIKE_01_CADENCE_REPORT = 'bike/000001/cadence'
-BIKE_01_POWER_REPORT = 'bike/000001/power'
-BIKE_01_BUTTON_REPORT = 'bike/000001/button/report'
-
-# Workout selector
-WORKOUT_SELECTOR_TOPIC = "bike/000001/workout"
+# Read topics dynamically for future flexibility
+READ_TOPICS = {
+    "INCLINE_REPORT": f'bike/{DEVICE_ID}/incline/control',
+    "RESISTANCE_REPORT": f'bike/{DEVICE_ID}/resistance/report',
+    "SPEED_REPORT": f'bike/{DEVICE_ID}/speed',
+    "CADENCE_REPORT": f'bike/{DEVICE_ID}/cadence',
+    "POWER_REPORT": f'bike/{DEVICE_ID}/power',
+    "BUTTON_REPORT": f'bike/{DEVICE_ID}/button/report',
+}
 
 class MQTT_Controller:
     def __init__(self):
-        self.client = MQTTClient(broker_address=MQTT_HOST,username=MQTT_USER,password=MQTT_PASS)
+        self.client = MQTTClient(broker_address=MQTT_HOST, username=MQTT_USER, password=MQTT_PASS)
         self.client.setup_mqtt_client()
         self.feedback()
         self._control_loop()
 
-    def publish_incline(self,val):
-        payload = json.dumps({"incline" : val, "timestamp": time.time()})
-        self.client.publish(INCLINE_TOPIC,payload)
+    def publish_message(self, topic, value):
+        payload = json.dumps({"value": value, "timestamp": self.get_timestamp()})
+        self.client.publish(topic, payload)
 
-    def publish_resistance(self,val):
-        payload = json.dumps({"resistance" : val, "timestamp": time.time()})
-        self.client.publish(RESISTANCE_TOPIC,payload)
+    def get_timestamp(self):
+        return time.time()
 
-    def publish_fan(self,val):
-        payload = json.dumps({"value" : val, "timestamp": time.time()})
-        self.client.publish(FAN_TOPIC,payload)
-    
-    def publish_workout_selector(self,val):
-        self.client.publish(WORKOUT_SELECTOR_TOPIC,val)
+    def publish_incline(self, val):
+        self.publish_message(TOPICS["INCLINE"], val)
+
+    def publish_resistance(self, val):
+        self.publish_message(TOPICS["RESISTANCE"], val)
+
+    def publish_fan(self, val):
+        self.publish_message(TOPICS["FAN"], val)
+
+    def publish_workout_selector(self, val):
+        self.client.publish(TOPICS["WORKOUT_SELECTOR"], val)
 
     def _control_input(self):
         time.sleep(0.8)
-        command = int(input('=====Select Topic=====\n\t1. Incline\n\t2. Resistance\n\t3. Fan\n\t4. Workout Selector\nINPUT = '))
-        match command:
-            case 1: 
-                val = float(input('Value: '))
-                self.publish_incline(val)
-            case 2:
-                val = float(input('Value: '))
-                self.publish_resistance(val)
-            case 3:
-                val = float(input('Value: '))
-                self.publish_fan(val)
-            case 4:
-                val = input('Value: ')
-                self.publish_workout_selector(val)
-            case _:
-                self._control_input()
+        command = self.get_valid_input(
+            '=====Select Topic=====\n\t1. Incline\n\t2. Resistance\n\t3. Fan\n\t4. Workout Selector\nINPUT = ',
+            [1, 2, 3, 4]
+        )
+        if command == 1:
+            val = self.get_valid_input('Incline Value: ', is_float=True)
+            self.publish_incline(val)
+        elif command == 2:
+            val = self.get_valid_input('Resistance Value: ', is_float=True)
+            self.publish_resistance(val)
+        elif command == 3:
+            val = self.get_valid_input('Fan Value: ', is_float=True)
+            self.publish_fan(val)
+        elif command == 4:
+            val = input('Workout Selector Value: ')
+            self.publish_workout_selector(val)
         time.sleep(0.5)
+
+    def get_valid_input(self, prompt, valid_values=None, is_float=False):
+        while True:
+            try:
+                user_input = input(prompt)
+                if is_float:
+                    value = float(user_input)
+                else:
+                    value = int(user_input)
+                if valid_values and value not in valid_values:
+                    print(f"Invalid input! Please enter one of the following: {valid_values}")
+                    continue
+                return value
+            except ValueError:
+                print("Invalid input! Please enter a valid number.")
 
     def _control_loop(self):
         try:
@@ -102,8 +123,7 @@ class MQTT_Controller:
             print('\nControl Loop Terminated.')
 
     def feedback(self):
-        subscribe_topics = SUBSCRIBED_TOPICS
-        for topic in subscribe_topics:
+        for topic in SUBSCRIBED_TOPICS:
             self.client.subscribe(topic)
 
 def main():
