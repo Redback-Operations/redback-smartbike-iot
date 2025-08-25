@@ -166,5 +166,5 @@ def main():
         pass
     mqtt_client.get_client().loop_stop()
 
-if __name__ == "_ _main__":
+if __name__ == "__main__":
     main()
