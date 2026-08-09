@@ -33,3 +33,9 @@
 
 # Remove nodes for duplicates
 node_modules/
+
+# Secrets / credentials
+.env
+.env.*
+*.pem
+*.key
