@@ -22,11 +22,11 @@ import paho.mqtt.client as mqtt
 
 def parse_arguments():
 
-    """Read endurance workout settings from command-line arguments."""
+    """Read strength workout settings from command-line arguments."""
 
     parser = argparse.ArgumentParser(
 
-        description="Run a steady FTP-based endurance cycling workout."
+        description="Run a high-resistance FTP-based cycling strength workout."
 
     )
 
@@ -34,13 +34,41 @@ def parse_arguments():
 
     parser.add_argument(
 
-        "--duration",
+        "--intervals",
 
         type=int,
 
-        default=1800,
+        default=6,
 
-        help="Duration of the main endurance stage in seconds. Default: 1800",
+        help="Number of strength intervals. Default: 6",
+
+    )
+
+ 
+
+    parser.add_argument(
+
+        "--work-duration",
+
+        type=int,
+
+        default=120,
+
+        help="Length of each strength interval in seconds. Default: 120",
+
+    )
+
+ 
+
+    parser.add_argument(
+
+        "--recovery-duration",
+
+        type=int,
+
+        default=180,
+
+        help="Length of each recovery period in seconds. Default: 180",
 
     )
 
@@ -52,9 +80,9 @@ def parse_arguments():
 
         type=float,
 
-        default=70.0,
+        default=85.0,
 
-        help="Endurance intensity as a percentage of FTP. Default: 70",
+        help="Strength interval intensity as FTP percentage. Default: 85",
 
     )
 
@@ -62,13 +90,41 @@ def parse_arguments():
 
     parser.add_argument(
 
-        "--endurance-resistance",
+        "--recovery-percent",
+
+        type=float,
+
+        default=50.0,
+
+        help="Recovery intensity as FTP percentage. Default: 50",
+
+    )
+
+ 
+
+    parser.add_argument(
+
+        "--work-resistance",
 
         type=int,
 
-        default=35,
+        default=70,
 
-        help="Resistance during the endurance stage, from 0 to 100. Default: 35",
+        help="Resistance during strength intervals, from 0 to 100. Default: 70",
+
+    )
+
+ 
+
+    parser.add_argument(
+
+        "--recovery-resistance",
+
+        type=int,
+
+        default=20,
+
+        help="Resistance during recovery periods, from 0 to 100. Default: 20",
 
     )
 
@@ -118,13 +174,13 @@ def parse_arguments():
 
     parser.add_argument(
 
-        "--recovery-percent",
+        "--target-cadence",
 
-        type=float,
+        type=int,
 
-        default=50.0,
+        default=60,
 
-        help="Warm-up and cool-down intensity as FTP percentage. Default: 50",
+        help="Suggested cadence during strength intervals in RPM. Default: 60",
 
     )
 
@@ -212,11 +268,23 @@ def get_ftp(cli_ftp):
 
 def validate_arguments(args):
 
-    """Validate workout duration, intensity and resistance values."""
+    """Validate strength workout settings."""
 
-    if args.duration <= 0:
+    if args.intervals <= 0:
 
-        raise ValueError("Endurance duration must be greater than zero.")
+        raise ValueError("Intervals must be greater than zero.")
+
+ 
+
+    if args.work_duration <= 0:
+
+        raise ValueError("Work duration must be greater than zero.")
+
+ 
+
+    if args.recovery_duration < 0:
+
+        raise ValueError("Recovery duration cannot be negative.")
 
  
 
@@ -232,11 +300,11 @@ def validate_arguments(args):
 
  
 
-    if not 55 <= args.intensity_percent <= 85:
+    if not 60 <= args.intensity_percent <= 110:
 
         raise ValueError(
 
-            "Endurance intensity should be between 55% and 85% of FTP."
+            "Strength intensity should be between 60% and 110% of FTP."
 
         )
 
@@ -248,7 +316,17 @@ def validate_arguments(args):
 
             "Recovery percentage must be greater than zero and "
 
-            "lower than the endurance intensity."
+            "lower than the strength intensity."
+
+        )
+
+ 
+
+    if not 30 <= args.target_cadence <= 120:
+
+        raise ValueError(
+
+            "Target cadence must be between 30 and 120 RPM."
 
         )
 
@@ -256,7 +334,9 @@ def validate_arguments(args):
 
     resistance_values = {
 
-        "endurance resistance": args.endurance_resistance,
+        "work resistance": args.work_resistance,
+
+        "recovery resistance": args.recovery_resistance,
 
         "warm-up resistance": args.warmup_resistance,
 
@@ -310,13 +390,15 @@ def publish_resistance(
 
     ftp_percent,
 
+    target_cadence,
+
     stage,
 
     dry_run=False,
 
 ):
 
-    """Publish a SmartBike resistance command with workout metadata."""
+    """Publish a SmartBike resistance command with strength metadata."""
 
     payload_data = {
 
@@ -326,7 +408,9 @@ def publish_resistance(
 
         "ftp_percent": ftp_percent,
 
-        "workout": "endurance",
+        "target_cadence_rpm": target_cadence,
+
+        "workout": "strength",
 
         "stage": stage,
 
@@ -370,7 +454,9 @@ def publish_resistance(
 
         f"Target power: {target_power:.1f} W "
 
-        f"({ftp_percent:.1f}% FTP)"
+        f"({ftp_percent:.1f}% FTP) | "
+
+        f"Target cadence: {target_cadence} RPM"
 
     )
 
@@ -396,27 +482,29 @@ def wait_for_stage(duration, dry_run):
 
 def run_workout(client, topic, args, ftp):
 
-    """Run the endurance warm-up, main stage and cool-down."""
+    """Run warm-up, strength intervals, recoveries and cool-down."""
 
-    endurance_power = ftp * (args.intensity_percent / 100)
+    strength_power = ftp * (args.intensity_percent / 100)
 
     recovery_power = ftp * (args.recovery_percent / 100)
 
  
 
-    print("\nStarting endurance workout")
+    print("\nStarting strength workout")
 
     print(f"FTP: {ftp:.1f} W")
 
     print(
 
-        f"Endurance target: {endurance_power:.1f} W "
+        f"Strength target: {strength_power:.1f} W "
 
         f"({args.intensity_percent:.1f}% FTP)"
 
     )
 
-    print(f"Main duration: {args.duration} seconds\n")
+    print(f"Target cadence: {args.target_cadence} RPM")
+
+    print(f"Intervals: {args.intervals}\n")
 
  
 
@@ -438,6 +526,8 @@ def run_workout(client, topic, args, ftp):
 
             args.recovery_percent,
 
+            80,
+
             "warmup",
 
             args.dry_run,
@@ -450,31 +540,79 @@ def run_workout(client, topic, args, ftp):
 
  
 
-    print("\nEndurance stage")
+    for interval_number in range(1, args.intervals + 1):
+
+        print(
+
+            f"\nStrength interval "
+
+            f"{interval_number}/{args.intervals}"
+
+        )
 
  
 
-    publish_resistance(
+        publish_resistance(
 
-        client,
+            client,
 
-        topic,
+            topic,
 
-        args.endurance_resistance,
+            args.work_resistance,
 
-        endurance_power,
+            strength_power,
 
-        args.intensity_percent,
+            args.intensity_percent,
 
-        "endurance",
+            args.target_cadence,
 
-        args.dry_run,
+            "strength",
 
-    )
+            args.dry_run,
+
+        )
 
  
 
-    wait_for_stage(args.duration, args.dry_run)
+        wait_for_stage(args.work_duration, args.dry_run)
+
+ 
+
+        if interval_number < args.intervals and args.recovery_duration > 0:
+
+            print(
+
+                f"Recovery "
+
+                f"{interval_number}/{args.intervals - 1}"
+
+            )
+
+ 
+
+            publish_resistance(
+
+                client,
+
+                topic,
+
+                args.recovery_resistance,
+
+                recovery_power,
+
+                args.recovery_percent,
+
+                80,
+
+                "recovery",
+
+                args.dry_run,
+
+            )
+
+ 
+
+            wait_for_stage(args.recovery_duration, args.dry_run)
 
  
 
@@ -496,6 +634,8 @@ def run_workout(client, topic, args, ftp):
 
             args.recovery_percent,
 
+            80,
+
             "cooldown",
 
             args.dry_run,
@@ -508,7 +648,7 @@ def run_workout(client, topic, args, ftp):
 
  
 
-    print("\nEndurance workout completed.")
+    print("\nStrength workout completed.")
 
  
 
@@ -604,13 +744,13 @@ def main():
 
     except KeyboardInterrupt:
 
-        print("\nEndurance workout stopped by the user.")
+        print("\nStrength workout stopped by the user.")
 
  
 
     except Exception as error:
 
-        print(f"\nEndurance workout failed: {error}")
+        print(f"\nStrength workout failed: {error}")
 
         sys.exit(1)
 
@@ -630,11 +770,13 @@ def main():
 
                 resistance_topic,
 
-                args.warmup_resistance,
+                args.recovery_resistance,
 
                 recovery_power,
 
                 args.recovery_percent,
+
+                80,
 
                 "recovery",
 
