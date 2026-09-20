@@ -1,8 +1,6 @@
-# redback-smartbike-iot
-IoT code for the Smartbike project (files for Bike 1)
-
 
 # Redback SmartBike IoT
+IoT code for the Smartbike project (files for Bike 1)
 
 An IoT control and telemetry platform for an indoor smart bike. The current
 implementation connects Raspberry Pi/Linux hardware to Wahoo/KICKR equipment
