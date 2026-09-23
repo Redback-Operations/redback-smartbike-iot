@@ -167,11 +167,6 @@ def main():
     if username:
         client.username_pw_set(username, password)
 
-    # Enable TLS for secure HiveMQ connections on port 8883.
-    if broker_port == 8883:
-        client.tls_set()
-        print("HiveMQ TLS enabled")
-
     try:
         print(f"Connecting to MQTT broker: {broker_address}:{broker_port}")
         client.connect(broker_address, broker_port, 60)
