@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "MQTT Improvising": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}
