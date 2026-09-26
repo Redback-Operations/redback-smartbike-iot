@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Redback SmartBike IoT Platform</title>
+  <link rel="stylesheet" href="/static/style.css?v=6" />
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- Top Navigation Header -->
+    <header class="navbar">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="5.5" cy="17.5" r="3.5"></circle>
+            <circle cx="18.5" cy="17.5" r="3.5"></circle>
+            <path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm-3 11.5L9 9l3-3 4.5 4.5H20"></path>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>Redback SmartBike</h1>
+          <div class="device-selector-wrap">
+            <span class="device-tag">DEVICE ID:</span>
+            <select id="device-select" class="device-dropdown" onchange="onDeviceSelectChange()">
+              <option value="000001" selected>Bike #000001</option>
+              <option value="000002">Bike #000002</option>
+              <option value="custom">Custom ID...</option>
+            </select>
+            <input type="text" id="custom-device-id" class="device-custom-input hidden" placeholder="e.g. 000003" onchange="onCustomDeviceSubmit()" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="nav-tabs">
+        <button id="tab-btn-overview" class="tab-btn active" onclick="switchTab('overview')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          Telemetry & Controls
+        </button>
+        <button id="tab-btn-mqtt" class="tab-btn" onclick="switchTab('mqtt')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+          MQTT Inspector & Tools
+          <span class="badge-count" id="mqtt-counter">0</span>
+        </button>
+      </nav>
+
+      <!-- Live device status -->
+      <div class="header-actions">
+        <div class="status-group">
+          <div class="status-chip" id="badge-mqtt" title="MQTT Broker Connection"><span class="indicator"></span> BROKER</div>
+          <div class="status-chip" id="badge-kickr" title="KICKR Smart Trainer"><span class="indicator"></span> KICKR</div>
+          <div class="status-chip" id="badge-climb" title="KICKR Climb Incline"><span class="indicator"></span> CLIMB</div>
+          <div class="status-chip" id="badge-hr" title="TICKR Heart Rate Monitor"><span class="indicator"></span> TICKR</div>
+          <div class="status-chip" id="badge-fan" title="Headwind Fan"><span class="indicator"></span> FAN</div>
+          <div class="status-chip" id="badge-btn" title="GPIO Button / Steering"><span class="indicator"></span> BUTTONS</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- TAB 1: TELEMETRY & CONTROLS -->
+    <main id="tab-overview" class="tab-content active">
+      
+      <!-- Primary Metric Cards -->
+      <section class="metrics-grid">
+        <div class="card metric-card">
+          <div class="card-meta">
+            <span class="metric-label">SPEED</span>
+            <span class="badge badge-blue"><span id="val-speed-ms">0.00</span> m/s</span>
+          </div>
+          <div class="metric-val-wrap">
+            <span class="metric-num" id="val-speed">0.0</span>
+            <span class="metric-unit">km/h</span>
+          </div>
+          <div class="sparkline-box">
+            <svg id="spark-speed" class="sparkline" viewBox="0 0 100 24"></svg>
+          </div>
+        </div>
+
+        <div class="card metric-card">
+          <div class="card-meta">
+            <span class="metric-label">CADENCE</span>
+            <span class="badge badge-purple">Target: 85-95</span>
+          </div>
+          <div class="metric-val-wrap">
+            <span class="metric-num" id="val-cadence">0</span>
+            <span class="metric-unit">RPM</span>
+          </div>
+          <div class="sparkline-box">
+            <svg id="spark-cadence" class="sparkline" viewBox="0 0 100 24"></svg>
+          </div>
+        </div>
+
+        <div class="card metric-card">
+          <div class="card-meta">
+            <span class="metric-label">POWER OUTPUT</span>
+            <span class="badge badge-amber">Instantaneous</span>
+          </div>
+          <div class="metric-val-wrap">
+            <span class="metric-num" id="val-power">0</span>
+            <span class="metric-unit">W</span>
+          </div>
+          <div class="sparkline-box">
+            <svg id="spark-power" class="sparkline" viewBox="0 0 100 24"></svg>
+          </div>
+        </div>
+
+        <div class="card metric-card">
+          <div class="card-meta">
+            <span class="metric-label">HEART RATE</span>
+            <span class="badge badge-rose" id="val-hr-zone">Resting</span>
+          </div>
+          <div class="metric-val-wrap">
+            <span class="metric-num" id="val-hr">--</span>
+            <span class="metric-unit">BPM</span>
+          </div>
+          <div class="sparkline-box">
+            <svg id="spark-hr" class="sparkline" viewBox="0 0 100 24"></svg>
+          </div>
+        </div>
+
+        <div class="card metric-card">
+          <div class="card-meta">
+            <span class="metric-label">RESISTANCE</span>
+            <span class="badge badge-indigo" id="badge-resistance-stage">Manual</span>
+          </div>
+          <div class="metric-val-wrap">
+            <span class="metric-num" id="val-resistance">0</span>
+            <span class="metric-unit">%</span>
+          </div>
+          <div class="meter-track" style="margin-top: 8px;">
+            <div class="meter-fill" id="bar-resistance" style="width: 0%; background: #6366f1;"></div>
+          </div>
+        </div>
+
+        <div class="card metric-card">
+          <div class="card-meta">
+            <span class="metric-label">HEADWIND FAN</span>
+            <span class="badge badge-cyan" id="badge-fan-level">Level 0</span>
+          </div>
+          <div class="metric-val-wrap">
+            <span class="metric-num" id="val-fan">0</span>
+            <span class="metric-unit">%</span>
+          </div>
+          <div class="meter-track" style="margin-top: 8px;">
+            <div class="meter-fill" id="bar-fan" style="width: 0%; background: #06b6d4;"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Interactive Hardware Controls Split -->
+      <section class="split-grid">
+        
+        <!-- Climb Angle Elevation & Interactive Pitch Control -->
+        <div class="card climb-card">
+          <div class="card-head">
+            <div>
+              <h3>KICKR Climb Elevation</h3>
+              <p class="desc">Real-time trainer pitch angle & bidirectional gradient actuator</p>
+            </div>
+            <div class="grade-display" id="val-grade-badge">+0.0%</div>
+          </div>
+
+          <div class="climb-viewport">
+            <div class="datum-line"></div>
+            <div class="bike-tilt-rig" id="bike-pitch-container">
+              <svg class="bike-svg" viewBox="0 0 120 70">
+                <circle cx="25" cy="50" r="16" fill="none" stroke="#64748b" stroke-width="4"/>
+                <circle cx="95" cy="50" r="16" fill="none" stroke="#64748b" stroke-width="4"/>
+                <polyline points="25,50 55,50 78,28 42,28 25,50" fill="none" stroke="#0f172a" stroke-width="4.5" stroke-linejoin="round"/>
+                <line x1="55" y1="50" x2="40" y2="20" stroke="#0f172a" stroke-width="4.5"/>
+                <line x1="95" y1="50" x2="78" y2="28" stroke="#0f172a" stroke-width="4.5"/>
+                <line x1="78" y1="28" x2="84" y2="18" stroke="#0f172a" stroke-width="4.5"/>
+                <line x1="80" y1="18" x2="90" y2="18" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round"/>
+                <line x1="36" y1="20" x2="46" y2="20" stroke="#0f172a" stroke-width="5" stroke-linecap="round"/>
+              </svg>
+            </div>
+          </div>
+
+          <div class="climb-action-bar">
+            <span class="action-label">Quick Incline Presets:</span>
+            <div class="grade-actions">
+              <button class="btn btn-sm" onclick="adjustClimb(-1.0)">-1.0%</button>
+              <button class="btn btn-sm" onclick="adjustClimb(-0.5)">-0.5%</button>
+              <button class="btn btn-sm" onclick="adjustClimb(0)">Flat (0%)</button>
+              <button class="btn btn-sm" onclick="adjustClimb(0.5)">+0.5%</button>
+              <button class="btn btn-sm" onclick="adjustClimb(1.0)">+1.0%</button>
+            </div>
+          </div>
+
+          <div class="slider-control-row">
+            <span class="action-label">Custom Pitch Slider (-10% to +19%):</span>
+            <div class="slider-with-val">
+              <input type="range" id="slider-climb" min="-10" max="19" step="0.5" value="0" oninput="onClimbSliderInput(this.value)" onchange="sendClimbGrade(this.value)" />
+              <span id="slider-climb-val" class="slider-val-badge">0.0%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resistance, Fan & Steering Actuators -->
+        <div class="card controls-card">
+          <div class="card-head">
+            <div>
+              <h3>Smart Trainer & Fan Actuators</h3>
+              <p class="desc">Send MQTT control commands directly to bike hardware</p>
+            </div>
+          </div>
+
+          <!-- Resistance Control -->
+          <div class="section-group">
+            <div class="section-label-row">
+              <label class="group-label">RESISTANCE ACTUATOR (0 - 100%)</label>
+              <span class="val-highlight" id="resistance-control-label">35%</span>
+            </div>
+            <div class="slider-with-val">
+              <input type="range" id="slider-resistance" min="0" max="100" step="1" value="35" oninput="onResistanceSliderInput(this.value)" onchange="sendResistance(this.value)" />
+            </div>
+            <div class="grade-actions" style="margin-top: 6px;">
+              <button class="btn btn-xs" onclick="sendResistance(15)">Recovery (15%)</button>
+              <button class="btn btn-xs" onclick="sendResistance(35)">Endurance (35%)</button>
+              <button class="btn btn-xs" onclick="sendResistance(70)">Threshold (70%)</button>
+              <button class="btn btn-xs" onclick="sendResistance(100)">Max (100%)</button>
+            </div>
+          </div>
+
+          <!-- Headwind Fan Control -->
+          <div class="section-group">
+            <div class="section-label-row">
+              <label class="group-label">HEADWIND FAN ACTUATOR</label>
+              <span class="val-highlight" id="fan-control-label">Level 2 (40%)</span>
+            </div>
+            <div class="grade-actions">
+              <button class="btn btn-xs" onclick="sendFanLevel(0)">Off (0)</button>
+              <button class="btn btn-xs" onclick="sendFanLevel(1)">Lvl 1 (20%)</button>
+              <button class="btn btn-xs" onclick="sendFanLevel(2)">Lvl 2 (40%)</button>
+              <button class="btn btn-xs" onclick="sendFanLevel(3)">Lvl 3 (60%)</button>
+              <button class="btn btn-xs" onclick="sendFanLevel(4)">Lvl 4 (80%)</button>
+              <button class="btn btn-xs" onclick="sendFanLevel(5)">Lvl 5 (100%)</button>
+            </div>
+          </div>
+
+          <!-- Steering & Brake Telemetry -->
+          <div class="section-group">
+            <label class="group-label">STEERING ACTUATION & BRAKE PADS</label>
+            <div class="steering-selector">
+              <div class="steer-node" id="steer-left">LEFT</div>
+              <div class="steer-node active" id="steer-center">CENTER</div>
+              <div class="steer-node" id="steer-right">RIGHT</div>
+            </div>
+            <div class="brake-label-row" style="margin-top: 10px;">
+              <span class="meter-title">Brake Sensor:</span>
+              <span id="brake-status-pill" class="pill-inactive">DISENGAGED</span>
+            </div>
+            <div class="brake-meters" style="margin-top: 6px;">
+              <div class="meter-row">
+                <span class="meter-title">Front Pad</span>
+                <div class="meter-track">
+                  <div class="meter-fill" id="bar-brake-front" style="width: 0%;"></div>
+                </div>
+                <span class="meter-val" id="val-brake-front">0%</span>
+              </div>
+              <div class="meter-row">
+                <span class="meter-title">Rear Pad</span>
+                <div class="meter-track">
+                  <div class="meter-fill" id="bar-brake-rear" style="width: 0%;"></div>
+                </div>
+                <span class="meter-val" id="val-brake-rear">0%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Workout Management & Routine Execution -->
+      <section class="card workout-card">
+        <div class="card-head">
+          <div>
+            <h3>Workout Routine Controller & Stage Monitor</h3>
+            <p class="desc">Execute automated training protocols (Endurance, Ramped, Strength, Threshold) with live FTP targets</p>
+          </div>
+          <div class="workout-status-badge" id="workout-status-pill">STATUS: IDLE</div>
+        </div>
+        
+        <div class="workout-grid">
+          <div class="workout-field">
+            <label class="field-label">SELECT PROTOCOL:</label>
+            <select id="workout-type-select" class="select-input">
+              <option value="Endurance">Endurance (Aerobic 70% FTP)</option>
+              <option value="Ramped">Ramped (Progressive Steps)</option>
+              <option value="Strength">Strength (High Resistance Intervals)</option>
+              <option value="Threshold">Threshold (95-105% FTP)</option>
+            </select>
+          </div>
+
+          <div class="workout-field">
+            <label class="field-label">RIDER FTP (WATTS):</label>
+            <input type="number" id="workout-ftp-input" class="text-input" value="200" min="50" max="600" step="5" />
+          </div>
+
+          <div class="workout-field">
+            <label class="field-label">ACTIONS:</label>
+            <div class="grade-actions">
+              <button class="btn btn-primary btn-sm" onclick="startSelectedWorkout()">Start Routine</button>
+              <button class="btn btn-danger btn-sm" onclick="stopWorkout()">Stop / Reset</button>
+            </div>
+          </div>
+
+          <div class="workout-metrics-summary">
+            <div class="summary-item">
+              <span class="summary-label">ACTIVE STAGE</span>
+              <span class="summary-val" id="val-workout-stage">--</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">TARGET POWER</span>
+              <span class="summary-val" id="val-workout-target-power">0 W</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">INTENSITY</span>
+              <span class="summary-val" id="val-workout-ftp-pct">0.0% FTP</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Delta-Only Event Console -->
+      <section class="card log-card">
+        <div class="card-head">
+          <div>
+            <h3>Delta Change Console</h3>
+            <p class="desc">Logs hardware state transitions and significant metric shifts</p>
+          </div>
+          <button class="btn btn-sm btn-subtle" onclick="clearLogs()">Clear Console</button>
+        </div>
+        <div class="console-box" id="delta-log-list">
+          <div class="log-entry system">
+            <span class="log-ts">[INIT]</span>
+            <span class="log-msg">Diagnostic console initialized. Listening for telemetry delta events.</span>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- TAB 2: MQTT INSPECTOR & PUBLISHER TOOL -->
+    <main id="tab-mqtt" class="tab-content">
+      
+      <!-- Interactive MQTT Message Publisher -->
+      <section class="card mqtt-publisher-card">
+        <div class="card-head">
+          <div>
+            <h3>MQTT Command & Message Publisher</h3>
+            <p class="desc">Publish custom JSON payloads or test control signals directly to broker topics</p>
+          </div>
+        </div>
+        <div class="publisher-grid">
+          <div class="publisher-field" style="flex: 2;">
+            <label class="field-label">TARGET TOPIC:</label>
+            <input type="text" id="pub-topic-input" class="text-input" placeholder="e.g. bike/000001/incline/control" value="bike/000001/resistance/control" />
+          </div>
+          <div class="publisher-field" style="flex: 1; max-width: 140px;">
+            <label class="field-label">QOS LEVEL:</label>
+            <select id="pub-qos-select" class="select-input">
+              <option value="0">QoS 0 (At most once)</option>
+              <option value="1" selected>QoS 1 (At least once)</option>
+              <option value="2">QoS 2 (Exactly once)</option>
+            </select>
+          </div>
+          <div class="publisher-field" style="flex: 1; max-width: 180px;">
+            <label class="field-label">TEMPLATES:</label>
+            <select id="pub-template-select" class="select-input" onchange="applyPublishTemplate(this.value)">
+              <option value="">Choose template...</option>
+              <option value="incline">Incline: 5.0%</option>
+              <option value="resistance">Resistance: 45%</option>
+              <option value="fan">Fan: Level 3</option>
+              <option value="btn_left">Button: Turn Left</option>
+              <option value="btn_brake">Button: Brake On</option>
+            </select>
+          </div>
+        </div>
+        <div class="publisher-payload-row">
+          <textarea id="pub-payload-input" class="textarea-input" rows="3" placeholder='{"resistance": 45, "timestamp": 123456789}'></textarea>
+          <button class="btn btn-primary" style="height: 100%; min-width: 150px;" onclick="publishCustomMqtt()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            Publish Message
+          </button>
+        </div>
+      </section>
+
+      <!-- Live Stream Table -->
+      <section class="card mqtt-inspector-card">
+        <div class="card-head">
+          <div>
+            <h3>MQTT Inbound Stream & Topic Inspector</h3>
+            <p class="desc">Live stream of all inbound broker messages across subscribed topics</p>
+          </div>
+          <div class="mqtt-controls">
+            <input type="text" id="mqtt-filter" class="search-input" placeholder="Filter topics or payloads..." oninput="filterMqttTable()" />
+            <button class="btn btn-sm btn-subtle" onclick="clearMqttTable()">Clear Buffer</button>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 110px;">Time</th>
+                <th style="width: 260px;">Topic</th>
+                <th style="width: 60px;">QoS</th>
+                <th style="width: 80px;">Bytes</th>
+                <th>Payload (Raw JSON)</th>
+              </tr>
+            </thead>
+            <tbody id="mqtt-table-body">
+              <!-- Populated via WebSocket -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+  </div>
+
+  <script src="/static/app.js?v=5"></script>
+</body>
+</html>
