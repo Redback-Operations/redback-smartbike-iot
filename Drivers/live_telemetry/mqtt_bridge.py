@@ -12,6 +12,7 @@ import os
 import sys
 import logging
 import argparse
+import paho.mqtt.client as paho
 
 root_folder = os.path.dirname(
     os.path.dirname(os.path.abspath(__file__))
@@ -35,7 +36,8 @@ class LiveTelemetryBridge(MQTTClient):
         password,
         device_id,
         port=8883,
-        dry_run=True
+        dry_run=True,
+        local_test=False
     ):
         super().__init__(
             broker_address,
@@ -46,9 +48,43 @@ class LiveTelemetryBridge(MQTTClient):
 
         self.device_id = device_id
         self.dry_run = dry_run
+        self.local_test = local_test
 
         self.speed_topic = f"bike/{device_id}/speed"
         self.cadence_topic = f"bike/{device_id}/cadence"
+
+        if local_test and broker_address not in (
+            "localhost", "127.0.0.1", "::1"
+        ):
+            raise ValueError(
+                "Local testing requires a loopback address"
+            )
+
+    def setup_mqtt_client(self):
+
+        self.client = paho.Client(
+            callback_api_version=paho.CallbackAPIVersion.VERSION2,
+            protocol=paho.MQTTv5
+        )
+
+        self.client.on_connect = self.on_connect
+        self.client.on_message = self.on_message
+
+        if not self.local_test:
+            self.client.tls_set()
+
+            if self.username is not None:
+                self.client.username_pw_set(
+                    self.username,
+                    self.password
+                )
+        else:
+            logger.info("Local MQTT testing mode enabled")
+
+        self.client.connect(
+            self.broker_address,
+            self.port
+        )
 
     def on_connect(
         self, client, userdata, flags, rc, properties=None
@@ -96,7 +132,7 @@ class LiveTelemetryBridge(MQTTClient):
             self.publish(topic, payload)
 
             logger.info(
-                "Telemetry published: %s: %s",
+                "Telemetry queued for publishing: %s: %s",
                 topic,
                 payload
             )
@@ -135,10 +171,21 @@ def main():
         help="Enable publishing of converted telemetry"
     )
 
+    parser.add_argument(
+        "--local-test",
+        action="store_true",
+        help="Allow unencrypted MQTT on loopback only"
+    )
+
     args = parser.parse_args()
 
     if not args.broker or not args.device_id:
         parser.error("Broker and device ID are required")
+
+    if args.local_test and args.broker not in (
+        "localhost", "127.0.0.1", "::1"
+    ):
+        parser.error("Local testing requires a loopback address")
 
     bridge = LiveTelemetryBridge(
         broker_address=args.broker,
@@ -146,7 +193,8 @@ def main():
         password=os.getenv("MQTT_PASSWORD"),
         device_id=args.device_id,
         port=args.port,
-        dry_run=not args.publish
+        dry_run=not args.publish,
+        local_test=args.local_test
     )
 
     try:
