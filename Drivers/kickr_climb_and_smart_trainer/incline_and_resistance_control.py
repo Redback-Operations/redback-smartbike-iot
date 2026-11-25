@@ -18,9 +18,10 @@ parser = ArgumentParser(description="Wahoo Kickr Incline and Resistance Control"
 parser.add_argument('--mac_address', dest='mac_address', type=str, help="The Wahoo Kickr BLE Device's unique mac address")
 
 # HiveMQ connection params
-parser.add_argument('--broker_address', dest='broker_address', type=str, help='The MQTT broker address getting from HiveMQ Cloud')
-parser.add_argument('--username', dest='username', type=str, help='HiveMQ Cloud username')
-parser.add_argument('--password', dest='password', type=str, help='HiveMQ Cloud password')
+parser.add_argument('--broker_address', dest='broker_address', type=str, help='MQTT broker host (defaults to MQTT_HOSTNAME)', default=os.getenv('MQTT_HOSTNAME'))
+parser.add_argument('--port', dest='port', type=int, help='MQTT broker port (defaults to MQTT_PORT)', default=int(os.getenv('MQTT_PORT', '1883')))
+parser.add_argument('--username', dest='username', type=str, help='MQTT username (defaults to MQTT_USERNAME)', default=os.getenv('MQTT_USERNAME'))
+parser.add_argument('--password', dest='password', type=str, help='MQTT password (defaults to MQTT_PASSWORD)', default=os.getenv('MQTT_PASSWORD'))
 
 parser.add_argument('--incline_command_topic', dest='incline_command_topic', type=str, help='a MQTT topic that will send incline or resistance control commands to this driver', default=BIKE_01_INCLINE_COMMAND)
 parser.add_argument('--incline_report_topic', dest='incline_report_topic', type=str, help='a MQTT topic that will receieve the current incline or resistance levels data from this driver', default=BIKE_01_INCLINE_REPORT)

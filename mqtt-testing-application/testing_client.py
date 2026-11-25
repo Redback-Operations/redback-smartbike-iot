@@ -14,7 +14,7 @@ To use:
     - Define topics you want to subscribe to on SUBSCRIBED_TOPICS
       *This will clog up the control interface but it will still work
     - Add/modify any control methods for control topics that are not already present
-    - Add the MQTT credentials
+    - Set the MQTT_* values in .env
     - Run
     - Enter the corrosponding numbers to select control methods
     - Input values to send to control topics
@@ -22,13 +22,10 @@ To use:
 
 # ========= USER SETTINGS =========
 
-# MQTT credentials
-MQTT_HOST = ''
-MQTT_USER = ''
-MQTT_PASS = ''
+# MQTT credentials come from .env (MQTT_HOSTNAME, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD)
 
 # Smartbike ID
-DEVICE_ID = '000001'
+DEVICE_ID = os.getenv('DEVICE_ID', '000001')
 
 # Testing Controls
 SUBSCRIBED_TOPICS = [] # use '#' for all topics
@@ -53,7 +50,7 @@ WORKOUT_SELECTOR_TOPIC = "bike/000001/workout"
 
 class MQTT_Controller:
     def __init__(self):
-        self.client = MQTTClient(broker_address=MQTT_HOST,username=MQTT_USER,password=MQTT_PASS)
+        self.client = MQTTClient.from_env()
         self.client.setup_mqtt_client()
         self.feedback()
         self._control_loop()
@@ -110,4 +107,4 @@ def main():
     controller = MQTT_Controller()
 
 if __name__ == '__main__':
-    main()
+    main()

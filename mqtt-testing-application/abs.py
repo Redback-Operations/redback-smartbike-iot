@@ -1,11 +1,11 @@
-import paho.mqtt.client as mqtt
 import os
+import sys
 import subprocess
 
-BIKE_ID = os.getenv("BIKEID", "000001")
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from Drivers.lib.mqtt_client import MQTTClient  # noqa: E402
 
-MQTT_BROKER = "your_mqtt_broker_address"
-MQTT_PORT = 1883
+BIKE_ID = os.getenv("DEVICE_ID") or os.getenv("BIKEID", "000001")
 MQTT_TOPIC = f"bike/{BIKE_ID}/startWorkout"
 
 WORKOUT_SCRIPTS = {
@@ -14,7 +14,7 @@ WORKOUT_SCRIPTS = {
     "Steady": "start_steady_workout.py"
 }
 
-def on_connect(client, userdata, flags, rc):
+def on_connect(client, userdata, flags, rc, properties=None):
     """Callback for when the client connects to the broker."""
     if rc == 0:
         print("Connected to MQTT broker")
@@ -39,12 +39,14 @@ def on_message(client, userdata, msg):
         print(f"Unrecognized payload: {payload}")
 
 def main():
-    client = mqtt.Client()
-    client.on_connect = on_connect
-    client.on_message = on_message
+    # Broker host/port/login come from .env (MQTT_HOSTNAME, MQTT_PORT, ...)
+    mqtt_client = MQTTClient.from_env()
+    mqtt_client.on_connect = on_connect
+    mqtt_client.on_message = on_message
 
     try:
-        client.connect(MQTT_BROKER, MQTT_PORT, 60)
+        mqtt_client.setup_mqtt_client()
+        client = mqtt_client.get_client()
     except Exception as e:
         print(f"Failed to connect to MQTT broker: {e}")
         return

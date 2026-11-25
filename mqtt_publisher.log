@@ -1,0 +1,17 @@
+2026-11-25 18:42:34,342 - INFO - Connecting to MQTT broker localhost:1883 (TLS=False)
+2026-11-25 18:42:34,384 - INFO - Publishing command: Ramped
+2026-11-25 18:42:34,385 - INFO - CONNACK received with code Success.
+2026-11-25 18:42:34,388 - INFO - Command published successfully: Ramped
+2026-11-25 18:42:35,387 - INFO - Disconnected result code: 0
+2026-11-25 18:43:14,378 - CRITICAL - Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\manny\OneDrive - Deakin University\UNI\Year 3 Trimester 3\BROKERHOST\redback-smartbike-iot\Drivers\Mqtt_integration\mqtt_publisher.py", line 37, in <module>
+    publish_workout_command("Ramped")
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\manny\OneDrive - Deakin University\UNI\Year 3 Trimester 3\BROKERHOST\redback-smartbike-iot\Drivers\Mqtt_integration\mqtt_publisher.py", line 17, in publish_workout_command
+    mqtt_client = MQTTClient.from_env()
+  File "C:\Users\manny\OneDrive - Deakin University\UNI\Year 3 Trimester 3\BROKERHOST\redback-smartbike-iot\Drivers\lib\mqtt_client.py", line 77, in from_env
+    return cls()
+  File "C:\Users\manny\OneDrive - Deakin University\UNI\Year 3 Trimester 3\BROKERHOST\redback-smartbike-iot\Drivers\lib\mqtt_client.py", line 73, in __init__
+    raise ValueError("MQTT broker host not set. Set MQTT_HOSTNAME in .env or pass --broker_address.")
+ValueError: MQTT broker host not set. Set MQTT_HOSTNAME in .env or pass --broker_address.

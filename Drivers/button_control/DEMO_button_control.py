@@ -50,7 +50,7 @@ parser = ArgumentParser(description="Bike turning controller")
 parser.add_argument('--broker_address', dest='broker_address', default=os.getenv('MQTT_HOSTNAME'), type=str, help='The MQTT broker address getting from HiveMQ Cloud')
 parser.add_argument('--username', dest='username', default=os.getenv('MQTT_USERNAME'), type=str, help='MQTT username')
 parser.add_argument('--password', dest='password', default=os.getenv('MQTT_PASSWORD'), type=str, help='MQTT password')
-parser.add_argument('--port', dest='port', default=os.getenv('MQTT_PORT'), type=int, help='MQTT broker port')
+parser.add_argument('--port', dest='port', default=int(os.getenv('MQTT_PORT', '1883')), type=int, help='MQTT broker port')
 parser.add_argument('--device_id', dest='device_id', default=os.getenv('DEVICE_ID'), type=str, help="Bike's unique id")
 parser.add_argument('--button_topic', dest='button_topic', default=f"bike/{os.getenv('DEVICE_ID')}/button", help='MQTT topic for activity of the buttons on the bike')
 args = parser.parse_args()
@@ -131,4 +131,4 @@ def main():
         #client.disconnect()
    
 if __name__=="__main__":
-    main()
+    main()

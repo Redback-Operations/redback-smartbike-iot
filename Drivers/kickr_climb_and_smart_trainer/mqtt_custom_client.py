@@ -12,8 +12,8 @@ from lib.constants import RESISTANCE_MIN, RESISTANCE_MAX, INCLINE_MIN, INCLINE_M
 
 # define a custom MQTT Client to be able send BLE FTMS commands while receiving command messages from a MQTT command topic
 class MQTTClientWithSendingFTMSCommands(MQTTClient):
-    def __init__(self, broker_address, username, password, device):
-        super().__init__(broker_address, username, password)
+    def __init__(self, broker_address, username, password, device, port=None):
+        super().__init__(broker_address, username, password, port=port)
         self.device = device
 
     def on_message(self, client, userdata, msg):
@@ -42,4 +42,4 @@ class MQTTClientWithSendingFTMSCommands(MQTTClient):
             else:
                 print("The command topic is not idetified.")
         else:
-            print("Skip the invalid command payload.")
+            print("Skip the invalid command payload.")
