@@ -1,0 +1,797 @@
+diff --git a/Drivers/Mqtt_integration/mqtt_listener.py b/Drivers/Mqtt_integration/mqtt_listener.py
+index a6231b8e..50bc0c90 100644
+--- a/Drivers/Mqtt_integration/mqtt_listener.py
++++ b/Drivers/Mqtt_integration/mqtt_listener.py
+@@ -1,69 +1,72 @@
+-#!/usr/bin/env python3
+-
+-import os
+-import argparse
+-import subprocess
+-from iot.Drivers.lib.mqtt_client import mqtt  # Importing the existing MQTT code
+-
+-# Set up argument parser to handle environment variables
+-parser = argparse.ArgumentParser(description="MQTT Listener for Workout Control")
+-parser.add_argument("--device_id", type=str, default=os.getenv('DEVICE_ID'),
+-                    help="The unique ID of the bike, used to form MQTT topics")
+-parser.add_argument("--mqtt_host", type=str, default=os.getenv('MQTT_HOST'),
+-                    help="MQTT broker host address")
+-parser.add_argument("--mqtt_user", type=str, default=os.getenv('MQTT_USER'),
+-                    help="MQTT username")
+-parser.add_argument("--mqtt_password", type=str, default=os.getenv('MQTT_PASSWORD'),
+-                    help="MQTT password")
+-parser.add_argument("--root_dir", type=str, default=os.getenv('ROOT_DIR', '/home/pi'),
+-                    help="Root directory where workout scripts are located")
+-
+-args = parser.parse_args()
+-
+-# MQTT topic
+-workout_topic = f"bike/{args.device_id}/workout"
+-
+-# State tracking for ongoing workouts
+-current_workout = None
+-
+-# MQTT Callbacks
+-def on_connect(client, userdata, flags, rc):
+-    print(f"Connected with result code {rc}")
+-    client.subscribe(workout_topic)
+-
+-def on_message(client, userdata, msg):
+-    global current_workout
+-    workout_type = msg.payload.decode().lower()  # Make workout selector case insensitive
+-    print(f"Message received: {msg.topic} {workout_type}")
+-
+-    if current_workout:
+-        print(f"Workout already started: {current_workout}")
+-        # Terminate the current workout if a new one is triggered
+-        print("Terminating current workout...")
+-        subprocess.run(["pkill", "-f", current_workout])  # Kills the current workout process
+-        current_workout = None
+-
+-    # Start a new workout based on the message
+-    if workout_type == "ramped":
+-        current_workout = os.path.join(args.root_dir, "Driver/start_ramped_workout.py")
+-    elif workout_type == "ftp":
+-        current_workout = os.path.join(args.root_dir, "Driver/start_ftp_workout.py")
+-    else:
+-        print("Unknown workout type")
+-        return
+-    
+-    # Start the selected workout
+-    print(f"Starting workout: {workout_type}")
+-    subprocess.run([current_workout])
+-    
+-# Setup MQTT Client
+-client = mqtt.Client()
+-client.username_pw_set(args.mqtt_user, args.mqtt_password)
+-client.on_connect = on_connect
+-client.on_message = on_message
+-
+-# Connect to MQTT Broker
+-client.connect(args.mqtt_host, 1883, 60)
+-
+-# Blocking call to process network traffic and dispatch callbacks
+-client.loop_forever()
++#!/usr/bin/env python3
++
++import os
++import argparse
++import sys
++import subprocess
++
++sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
++from lib.mqtt_client import MQTTClient  # noqa: E402
++
++# Set up argument parser to handle environment variables
++parser = argparse.ArgumentParser(description="MQTT Listener for Workout Control")
++parser.add_argument("--device_id", type=str, default=os.getenv('DEVICE_ID'),
++                    help="The unique ID of the bike, used to form MQTT topics")
++parser.add_argument("--mqtt_host", type=str, default=os.getenv('MQTT_HOSTNAME') or os.getenv('MQTT_HOST'),
++                    help="MQTT broker host address")
++parser.add_argument("--mqtt_port", type=int, default=int(os.getenv('MQTT_PORT', '1883')),
++                    help="MQTT broker port")
++parser.add_argument("--mqtt_user", type=str, default=os.getenv('MQTT_USERNAME') or os.getenv('MQTT_USER'),
++                    help="MQTT username")
++parser.add_argument("--mqtt_password", type=str, default=os.getenv('MQTT_PASSWORD') or os.getenv('MQTT_PASS'),
++                    help="MQTT password")
++parser.add_argument("--root_dir", type=str, default=os.getenv('ROOT_DIR', '/home/pi'),
++                    help="Root directory where workout scripts are located")
++
++args = parser.parse_args()
++
++# MQTT topic
++workout_topic = f"bike/{args.device_id}/workout"
++
++# State tracking for ongoing workouts
++current_workout = None
++
++# MQTT Callbacks
++def on_connect(client, userdata, flags, rc, properties=None):
++    print(f"Connected with result code {rc}")
++    client.subscribe(workout_topic)
++
++def on_message(client, userdata, msg):
++    global current_workout
++    workout_type = msg.payload.decode().lower()  # Make workout selector case insensitive
++    print(f"Message received: {msg.topic} {workout_type}")
++
++    if current_workout:
++        print(f"Workout already started: {current_workout}")
++        # Terminate the current workout if a new one is triggered
++        print("Terminating current workout...")
++        subprocess.run(["pkill", "-f", current_workout])  # Kills the current workout process
++        current_workout = None
++
++    # Start a new workout based on the message
++    if workout_type == "ramped":
++        current_workout = os.path.join(args.root_dir, "Driver/start_ramped_workout.py")
++    elif workout_type == "ftp":
++        current_workout = os.path.join(args.root_dir, "Driver/start_ftp_workout.py")
++    else:
++        print("Unknown workout type")
++        return
++    
++    # Start the selected workout
++    print(f"Starting workout: {workout_type}")
++    subprocess.run([current_workout])
++    
++# Setup MQTT Client (host, port, login and TLS from args / .env)
++mqtt_client = MQTTClient(args.mqtt_host, args.mqtt_user, args.mqtt_password, port=args.mqtt_port)
++mqtt_client.on_connect = on_connect
++mqtt_client.on_message = on_message
++mqtt_client.setup_mqtt_client()
++client = mqtt_client.get_client()
++
++# Blocking call to process network traffic and dispatch callbacks
++client.loop_forever()
+diff --git a/Drivers/Mqtt_integration/mqtt_publisher.py b/Drivers/Mqtt_integration/mqtt_publisher.py
+index d47b3fd1..823d4a93 100644
+--- a/Drivers/Mqtt_integration/mqtt_publisher.py
++++ b/Drivers/Mqtt_integration/mqtt_publisher.py
+@@ -1,35 +1,35 @@
+-import paho.mqtt.client as mqtt
++import os
++import sys
+ import logging
+ 
++sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
++from lib.mqtt_client import MQTTClient  # noqa: E402
++
+ # Configure logging
+ logging.basicConfig(filename='mqtt_publisher.log', level=logging.INFO,
+                     format='%(asctime)s - %(levelname)s - %(message)s')
+ 
+-# MQTT settings
+-MQTT_BROKER = "broker_host"
+-MQTT_PORT = 1883
+-MQTT_TOPIC = "bike/000001/workout"
+-
+-def on_connect(client, userdata, flags, rc):
+-    """Callback when the client connects to the MQTT broker."""
+-    logging.info(f"Connected to MQTT Broker with result code {rc}")
++# Broker host/port/login come from .env (MQTT_HOSTNAME, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD)
++MQTT_TOPIC = f"bike/{os.getenv('DEVICE_ID', '000001')}/workout"
+ 
+ def publish_workout_command(command):
+     """Publish a workout command to the MQTT broker."""
+-    client = mqtt.Client()
+-    client.on_connect = on_connect
++    mqtt_client = MQTTClient.from_env()
++    client = None
+     try:
+-        client.connect(MQTT_BROKER, MQTT_PORT, 60)
++        mqtt_client.setup_mqtt_client()
++        client = mqtt_client.get_client()
+         client.loop_start()
+         logging.info(f"Publishing command: {command}")
+-        result = client.publish(MQTT_TOPIC, command)
++        result = client.publish(MQTT_TOPIC, command, qos=1)
+         result.wait_for_publish()
+         logging.info(f"Command published successfully: {command}")
+     except Exception as e:
+         logging.error(f"Failed to publish command: {e}")
+     finally:
+-        client.loop_stop()
+-        client.disconnect()
++        if client:
++            client.loop_stop()
++            client.disconnect()
+ 
+ if __name__ == "__main__":
+     # Example usage
+diff --git a/Drivers/button_control/DEMO_button_control.py b/Drivers/button_control/DEMO_button_control.py
+index 5946b88b..10b2759c 100644
+--- a/Drivers/button_control/DEMO_button_control.py
++++ b/Drivers/button_control/DEMO_button_control.py
+@@ -50,7 +50,7 @@ parser = ArgumentParser(description="Bike turning controller")
+ parser.add_argument('--broker_address', dest='broker_address', default=os.getenv('MQTT_HOSTNAME'), type=str, help='The MQTT broker address getting from HiveMQ Cloud')
+ parser.add_argument('--username', dest='username', default=os.getenv('MQTT_USERNAME'), type=str, help='MQTT username')
+ parser.add_argument('--password', dest='password', default=os.getenv('MQTT_PASSWORD'), type=str, help='MQTT password')
+-parser.add_argument('--port', dest='port', default=os.getenv('MQTT_PORT'), type=int, help='MQTT broker port')
++parser.add_argument('--port', dest='port', default=int(os.getenv('MQTT_PORT', '1883')), type=int, help='MQTT broker port')
+ parser.add_argument('--device_id', dest='device_id', default=os.getenv('DEVICE_ID'), type=str, help="Bike's unique id")
+ parser.add_argument('--button_topic', dest='button_topic', default=f"bike/{os.getenv('DEVICE_ID')}/button", help='MQTT topic for activity of the buttons on the bike')
+ args = parser.parse_args()
+diff --git a/Drivers/button_control/button_control.py b/Drivers/button_control/button_control.py
+index 5671d6f7..457c74dd 100644
+--- a/Drivers/button_control/button_control.py
++++ b/Drivers/button_control/button_control.py
+@@ -55,7 +55,7 @@ parser = ArgumentParser(description="Bike turning controller")
+ parser.add_argument('--broker_address', dest='broker_address', default=os.getenv('MQTT_HOSTNAME'), type=str, help='The MQTT broker address getting from HiveMQ Cloud')
+ parser.add_argument('--username', dest='username', default=os.getenv('MQTT_USERNAME'), type=str, help='MQTT username')
+ parser.add_argument('--password', dest='password', default=os.getenv('MQTT_PASSWORD'), type=str, help='MQTT password')
+-parser.add_argument('--port', dest='port', default=os.getenv('MQTT_PORT'), type=int, help='MQTT broker port')
++parser.add_argument('--port', dest='port', default=int(os.getenv('MQTT_PORT', '1883')), type=int, help='MQTT broker port')
+ parser.add_argument('--device_id', dest='device_id', default=os.getenv('DEVICE_ID'), type=str, help="Bike's unique id")
+ parser.add_argument('--button_topic', dest='button_topic', default=f"bike/{os.getenv('DEVICE_ID')}/button", help='MQTT topic for activity of the buttons on the bike')
+ args = parser.parse_args()
+diff --git a/Drivers/button_control/copy/DEMO_button_control.py b/Drivers/button_control/copy/DEMO_button_control.py
+index fd278b33..6730307e 100644
+--- a/Drivers/button_control/copy/DEMO_button_control.py
++++ b/Drivers/button_control/copy/DEMO_button_control.py
+@@ -40,7 +40,7 @@ parser = ArgumentParser(description="Bike turning controller")
+ parser.add_argument('--broker_address', dest='broker_address', default=os.getenv('MQTT_HOSTNAME'), type=str, help='The MQTT broker address getting from HiveMQ Cloud')
+ parser.add_argument('--username', dest='username', default=os.getenv('MQTT_USERNAME'), type=str, help='MQTT username')
+ parser.add_argument('--password', dest='password', default=os.getenv('MQTT_PASSWORD'), type=str, help='MQTT password')
+-parser.add_argument('--port', dest='port', default=os.getenv('MQTT_PORT'), type=int, help='MQTT broker port')
++parser.add_argument('--port', dest='port', default=int(os.getenv('MQTT_PORT', '1883')), type=int, help='MQTT broker port')
+ parser.add_argument('--device_id', dest='device_id', default=os.getenv('DEVICE_ID'), type=str, help="Bike's unique id")
+ parser.add_argument('--button_topic', dest='button_topic', default=f"bike/{os.getenv('DEVICE_ID')}/button", help='MQTT topic for activity of the buttons on the bike')
+ args = parser.parse_args()
+diff --git a/Drivers/cadence_sensor/mqtt_client.py b/Drivers/cadence_sensor/mqtt_client.py
+index ab97477c..492242d3 100644
+--- a/Drivers/cadence_sensor/mqtt_client.py
++++ b/Drivers/cadence_sensor/mqtt_client.py
+@@ -1,64 +1,9 @@
+ #!/usr/bin/env python3
++# Thin wrapper: use the shared client in Drivers/lib so broker host, port,
++# login and TLS all come from .env (MQTT_HOSTNAME, MQTT_PORT, ...).
++import os
++import sys
+ 
+-import time
+-import paho.mqtt.client as paho
+-from paho import mqtt
++sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+ 
+-# this is a MQTT client that is able to publish to and subscribe from MQTT topics in HiveMQ Cloud
+-class MQTTClient:
+-    def __init__(self, broker_address, username, password):
+-        self.broker_address = broker_address
+-        self.username = username
+-        self.password = password
+-        self.client = None
+-
+-    def get_client(self):
+-        return self.client
+-
+-    def setup_mqtt_client(self):
+-        # using MQTT version 5 here, for 3.1.1: MQTTv311, 3.1: MQTTv31
+-        # userdata is user defined data of any type, updated by user_data_set()
+-        # client_id is the given name of the client
+-        self.client = paho.Client(client_id="", userdata=None, protocol=paho.MQTTv5)
+-        self.client.on_connect = on_connect
+-
+-        # enable TLS for secure connection
+-        self.client.tls_set(tls_version=mqtt.client.ssl.PROTOCOL_TLS)
+-        # set username and password
+-        self.client.username_pw_set(self.username, self.password)
+-        # connect to HiveMQ Cloud on port 8883 (default for MQTT)
+-        self.client.connect(self.broker_address, 8883)
+-
+-        # setting callbacks, use separate functions like above for better visibility
+-        self.client.on_subscribe = on_subscribe
+-        self.client.on_message = on_message
+-        self.client.on_publish = on_publish
+-
+-    def subscribe(self, topic_name):
+-        # subscribe to all topics of encyclopedia by using the wildcard "#"
+-        self.client.subscribe(topic_name, qos=1)
+-
+-    def publish(self, topic_name, payload):
+-        # a single publish, this can also be done in loops, etc.
+-        self.client.publish(topic_name, payload=payload, qos=1)
+-
+-    def loop_forever(self):
+-        # loop_forever for simplicity, here you need to stop the loop manually
+-        # you can also use loop_start and loop_stop
+-        self.client.loop_forever()
+-
+-# setting callbacks for different events to see if it works, print the message etc.
+-def on_connect(client, userdata, flags, rc, properties=None):
+-    print("CONNACK received with code %s." % rc)
+-
+-# with this callback you can see if your publish was successful
+-def on_publish(client, userdata, mid, properties=None):
+-    print("mid: " + str(mid))
+-
+-# print which topic was subscribed to
+-def on_subscribe(client, userdata, mid, granted_qos, properties=None):
+-    print("Subscribed: " + str(mid) + " " + str(granted_qos))
+-
+-# print message, useful for checking if it was successful
+-def on_message(client, userdata, msg):
+-    print(msg.topic + " " + str(msg.qos) + " " + str(msg.payload))
+\ No newline at end of file
++from lib.mqtt_client import MQTTClient, load_mqtt_config  # noqa: E402,F401
+diff --git a/Drivers/fan/mqtt_client.py b/Drivers/fan/mqtt_client.py
+index fcc38768..492242d3 100644
+--- a/Drivers/fan/mqtt_client.py
++++ b/Drivers/fan/mqtt_client.py
+@@ -1,65 +1,9 @@
+- #!/usr/bin/env python3
++#!/usr/bin/env python3
++# Thin wrapper: use the shared client in Drivers/lib so broker host, port,
++# login and TLS all come from .env (MQTT_HOSTNAME, MQTT_PORT, ...).
++import os
++import sys
+ 
+-import time
+-import paho.mqtt.client as paho
+-from paho import mqtt
++sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+ 
+-
+-# this is a MQTT client that is able to publish to and subscribe from MQTT topics in HiveMQ Cloud
+-class MQTTClient:
+-    def __init__(self, broker_address, username, password):
+-        self.broker_address = broker_address
+-        self.username = username
+-        self.password = password
+-        self.client = None
+-
+-    def get_client(self):
+-        return self.client
+-
+-    def setup_mqtt_client(self):
+-        # using MQTT version 5 here, for 3.1.1: MQTTv311, 3.1: MQTTv31
+-        # userdata is user defined data of any type, updated by user_data_set()
+-        # client_id is the given name of the client
+-        self.client = paho.Client(client_id="", userdata=None, protocol=paho.MQTTv5)
+-        self.client.on_connect = on_connect
+-
+-        # enable TLS for secure connection
+-        self.client.tls_set(tls_version=mqtt.client.ssl.PROTOCOL_TLS)
+-        # set username and password
+-        self.client.username_pw_set(self.username, self.password)
+-        # connect to HiveMQ Cloud on port 8883 (default for MQTT)
+-        self.client.connect(self.broker_address, 8883)
+-
+-        # setting callbacks, use separate functions like above for better visibility
+-        self.client.on_subscribe = on_subscribe
+-        self.client.on_message = on_message
+-        self.client.on_publish = on_publish
+-
+-    def subscribe(self, topic_name):
+-        # subscribe to all topics of encyclopedia by using the wildcard "#"
+-        self.client.subscribe(topic_name, qos=1)
+-
+-    def publish(self, topic_name, payload):
+-        # a single publish, this can also be done in loops, etc.
+-        self.client.publish(topic_name, payload=payload, qos=1)
+-
+-    def loop_forever(self):
+-        # loop_forever for simplicity, here you need to stop the loop manually
+-        # you can also use loop_start and loop_stop
+-        self.client.loop_forever()
+-
+-# setting callbacks for different events to see if it works, print the message etc.
+-def on_connect(client, userdata, flags, rc, properties=None):
+-    print("CONNACK received with code %s." % rc)
+-
+-# with this callback you can see if your publish was successful
+-def on_publish(client, userdata, mid, properties=None):
+-    print("mid: " + str(mid))
+-
+-# print which topic was subscribed to
+-def on_subscribe(client, userdata, mid, granted_qos, properties=None):
+-    print("Subscribed: " + str(mid) + " " + str(granted_qos))
+-
+-# print message, useful for checking if it was successful
+-def on_message(client, userdata, msg):
+-    print(msg.topic + " " + str(msg.qos) + " " + str(msg.payload))
++from lib.mqtt_client import MQTTClient, load_mqtt_config  # noqa: E402,F401
+diff --git a/Drivers/heart_rate_sensor/mqtt_client.py b/Drivers/heart_rate_sensor/mqtt_client.py
+index ab97477c..492242d3 100644
+--- a/Drivers/heart_rate_sensor/mqtt_client.py
++++ b/Drivers/heart_rate_sensor/mqtt_client.py
+@@ -1,64 +1,9 @@
+ #!/usr/bin/env python3
++# Thin wrapper: use the shared client in Drivers/lib so broker host, port,
++# login and TLS all come from .env (MQTT_HOSTNAME, MQTT_PORT, ...).
++import os
++import sys
+ 
+-import time
+-import paho.mqtt.client as paho
+-from paho import mqtt
++sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+ 
+-# this is a MQTT client that is able to publish to and subscribe from MQTT topics in HiveMQ Cloud
+-class MQTTClient:
+-    def __init__(self, broker_address, username, password):
+-        self.broker_address = broker_address
+-        self.username = username
+-        self.password = password
+-        self.client = None
+-
+-    def get_client(self):
+-        return self.client
+-
+-    def setup_mqtt_client(self):
+-        # using MQTT version 5 here, for 3.1.1: MQTTv311, 3.1: MQTTv31
+-        # userdata is user defined data of any type, updated by user_data_set()
+-        # client_id is the given name of the client
+-        self.client = paho.Client(client_id="", userdata=None, protocol=paho.MQTTv5)
+-        self.client.on_connect = on_connect
+-
+-        # enable TLS for secure connection
+-        self.client.tls_set(tls_version=mqtt.client.ssl.PROTOCOL_TLS)
+-        # set username and password
+-        self.client.username_pw_set(self.username, self.password)
+-        # connect to HiveMQ Cloud on port 8883 (default for MQTT)
+-        self.client.connect(self.broker_address, 8883)
+-
+-        # setting callbacks, use separate functions like above for better visibility
+-        self.client.on_subscribe = on_subscribe
+-        self.client.on_message = on_message
+-        self.client.on_publish = on_publish
+-
+-    def subscribe(self, topic_name):
+-        # subscribe to all topics of encyclopedia by using the wildcard "#"
+-        self.client.subscribe(topic_name, qos=1)
+-
+-    def publish(self, topic_name, payload):
+-        # a single publish, this can also be done in loops, etc.
+-        self.client.publish(topic_name, payload=payload, qos=1)
+-
+-    def loop_forever(self):
+-        # loop_forever for simplicity, here you need to stop the loop manually
+-        # you can also use loop_start and loop_stop
+-        self.client.loop_forever()
+-
+-# setting callbacks for different events to see if it works, print the message etc.
+-def on_connect(client, userdata, flags, rc, properties=None):
+-    print("CONNACK received with code %s." % rc)
+-
+-# with this callback you can see if your publish was successful
+-def on_publish(client, userdata, mid, properties=None):
+-    print("mid: " + str(mid))
+-
+-# print which topic was subscribed to
+-def on_subscribe(client, userdata, mid, granted_qos, properties=None):
+-    print("Subscribed: " + str(mid) + " " + str(granted_qos))
+-
+-# print message, useful for checking if it was successful
+-def on_message(client, userdata, msg):
+-    print(msg.topic + " " + str(msg.qos) + " " + str(msg.payload))
+\ No newline at end of file
++from lib.mqtt_client import MQTTClient, load_mqtt_config  # noqa: E402,F401
+diff --git a/Drivers/kickr_climb_and_smart_trainer/incline_and_resistance_control.py b/Drivers/kickr_climb_and_smart_trainer/incline_and_resistance_control.py
+index 2e7ce9ee..bf55e905 100644
+--- a/Drivers/kickr_climb_and_smart_trainer/incline_and_resistance_control.py
++++ b/Drivers/kickr_climb_and_smart_trainer/incline_and_resistance_control.py
+@@ -18,9 +18,10 @@ parser = ArgumentParser(description="Wahoo Kickr Incline and Resistance Control"
+ parser.add_argument('--mac_address', dest='mac_address', type=str, help="The Wahoo Kickr BLE Device's unique mac address")
+ 
+ # HiveMQ connection params
+-parser.add_argument('--broker_address', dest='broker_address', type=str, help='The MQTT broker address getting from HiveMQ Cloud')
+-parser.add_argument('--username', dest='username', type=str, help='HiveMQ Cloud username')
+-parser.add_argument('--password', dest='password', type=str, help='HiveMQ Cloud password')
++parser.add_argument('--broker_address', dest='broker_address', type=str, help='MQTT broker host (defaults to MQTT_HOSTNAME)', default=os.getenv('MQTT_HOSTNAME'))
++parser.add_argument('--port', dest='port', type=int, help='MQTT broker port (defaults to MQTT_PORT)', default=int(os.getenv('MQTT_PORT', '1883')))
++parser.add_argument('--username', dest='username', type=str, help='MQTT username (defaults to MQTT_USERNAME)', default=os.getenv('MQTT_USERNAME'))
++parser.add_argument('--password', dest='password', type=str, help='MQTT password (defaults to MQTT_PASSWORD)', default=os.getenv('MQTT_PASSWORD'))
+ 
+ parser.add_argument('--incline_command_topic', dest='incline_command_topic', type=str, help='a MQTT topic that will send incline or resistance control commands to this driver', default=BIKE_01_INCLINE_COMMAND)
+ parser.add_argument('--incline_report_topic', dest='incline_report_topic', type=str, help='a MQTT topic that will receieve the current incline or resistance levels data from this driver', default=BIKE_01_INCLINE_REPORT)
+diff --git a/Drivers/kickr_climb_and_smart_trainer/mqtt_custom_client.py b/Drivers/kickr_climb_and_smart_trainer/mqtt_custom_client.py
+index 7d36babd..4744bba8 100644
+--- a/Drivers/kickr_climb_and_smart_trainer/mqtt_custom_client.py
++++ b/Drivers/kickr_climb_and_smart_trainer/mqtt_custom_client.py
+@@ -12,8 +12,8 @@ from lib.constants import RESISTANCE_MIN, RESISTANCE_MAX, INCLINE_MIN, INCLINE_M
+ 
+ # define a custom MQTT Client to be able send BLE FTMS commands while receiving command messages from a MQTT command topic
+ class MQTTClientWithSendingFTMSCommands(MQTTClient):
+-    def __init__(self, broker_address, username, password, device):
+-        super().__init__(broker_address, username, password)
++    def __init__(self, broker_address, username, password, device, port=None):
++        super().__init__(broker_address, username, password, port=port)
+         self.device = device
+ 
+     def on_message(self, client, userdata, msg):
+diff --git a/Drivers/kickr_climb_and_smart_trainer/wahoo_device.py b/Drivers/kickr_climb_and_smart_trainer/wahoo_device.py
+index 6377c7ca..3f61d6c0 100644
+--- a/Drivers/kickr_climb_and_smart_trainer/wahoo_device.py
++++ b/Drivers/kickr_climb_and_smart_trainer/wahoo_device.py
+@@ -52,7 +52,7 @@ class WahooDevice(gatt.Device):
+         self.setup_mqtt_connection()
+ 
+     def setup_mqtt_connection(self):
+-        self.mqtt_client = MQTTClientWithSendingFTMSCommands(self.args.broker_address, self.args.username, self.args.password, self)
++        self.mqtt_client = MQTTClientWithSendingFTMSCommands(self.args.broker_address, self.args.username, self.args.password, self, port=self.args.port)
+         self.mqtt_client.setup_mqtt_client()
+ 
+         # subscribe to both resistance and incline command topics
+diff --git a/Drivers/lib/mqtt_client.py b/Drivers/lib/mqtt_client.py
+index 6e46301f..e8ee8954 100644
+--- a/Drivers/lib/mqtt_client.py
++++ b/Drivers/lib/mqtt_client.py
+@@ -1,5 +1,6 @@
+ #!/usr/bin/env python3
+ 
++import os
+ import sys
+ import time
+ import paho.mqtt.client as paho
+@@ -31,15 +32,50 @@ def handle_exception(exc_type, exc_value, exc_traceback):
+ 
+ sys.excepthook = handle_exception
+ 
++# this is a MQTT client that is able to publish to and subscribe from MQTT topics
++def _env(*names, default=None):
++    """Return the first non-empty environment variable from names."""
++    for name in names:
++        value = os.getenv(name)
++        if value:
++            return value
++    return default
++
++
++def load_mqtt_config():
++    """Read broker settings from the environment (.env).
++
++    Primary names: MQTT_HOSTNAME, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD, MQTT_USE_TLS.
++    Legacy aliases MQTT_HOST, MQTT_USER, MQTT_PASS are still accepted.
++    """
++    host = _env("MQTT_HOSTNAME", "MQTT_HOST")
++    port = int(_env("MQTT_PORT", default="1883"))
++    username = _env("MQTT_USERNAME", "MQTT_USER")
++    password = _env("MQTT_PASSWORD", "MQTT_PASS")
++    use_tls = _env("MQTT_USE_TLS", default="").lower() in ("true", "1", "yes") or port == 8883
++    return {"host": host, "port": port, "username": username,
++            "password": password, "use_tls": use_tls}
++
++
+ # this is a MQTT client that is able to publish to and subscribe from MQTT topics
+ class MQTTClient:
+-    def __init__(self, broker_address, username, password, port=1883):
+-        self.broker_address = broker_address
+-        self.username = username
+-        self.password = password
+-        self.port = port
++    def __init__(self, broker_address=None, username=None, password=None, port=None, use_tls=None):
++        # Anything not passed in falls back to the environment, so callers never hard-code broker details
++        config = load_mqtt_config()
++        self.broker_address = broker_address or config["host"]
++        self.username = username or config["username"]
++        self.password = password or config["password"]
++        self.port = int(port) if port else config["port"]
++        self.use_tls = config["use_tls"] if use_tls is None else use_tls
+         self.client = None
+ 
++        if not self.broker_address:
++            raise ValueError("MQTT broker host not set. Set MQTT_HOSTNAME in .env or pass --broker_address.")
++
++    @classmethod
++    def from_env(cls):
++        return cls()
++
+     def get_client(self):
+         return self.client
+ 
+@@ -50,11 +86,13 @@ class MQTTClient:
+         self.client = paho.Client(client_id="", userdata=None, protocol=paho.MQTTv5)
+         self.client.on_connect = self.on_connect
+ 
+-        # enable TLS for secure connection
+-        self.client.tls_set(tls_version=paho.ssl.PROTOCOL_TLS)
+-        # set username and password
+-        self.client.username_pw_set(self.username, self.password)
+-        # Default port 1883
++        # enable TLS only when configured (MQTT_USE_TLS=true or port 8883)
++        if self.use_tls:
++            self.client.tls_set(tls_version=paho.ssl.PROTOCOL_TLS)
++        # only send a login if one is configured
++        if self.username:
++            self.client.username_pw_set(self.username, self.password)
++        logger.info(f"Connecting to MQTT broker {self.broker_address}:{self.port} (TLS={self.use_tls})")
+         self.client.connect(self.broker_address, self.port)
+ 
+         # setting callbacks, use separate functions like above for better visibility
+@@ -104,12 +142,7 @@ class MQTTClient:
+             self.client.reconnect()
+ 
+ if __name__ == '__main__':
+-
+-    MQTT_HOST = ''
+-    MQTT_USER = ''
+-    MQTT_PASS = ''
+-    MQTT_PORT = 1883
+-
+-    client = MQTTClient(MQTT_HOST, MQTT_USER, MQTT_PASS, MQTT_PORT)
++    # quick connection test using the values in .env
++    client = MQTTClient.from_env()
+     client.setup_mqtt_client()
+     client.loop_forever()
+diff --git a/Drivers/lib/tests/test_mqtt_config.py b/Drivers/lib/tests/test_mqtt_config.py
+new file mode 100644
+index 00000000..5b949d1a
+--- /dev/null
++++ b/Drivers/lib/tests/test_mqtt_config.py
+@@ -0,0 +1,55 @@
++import os
++import sys
++
++import pytest
++
++sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
++
++from lib.mqtt_client import MQTTClient, load_mqtt_config  # noqa: E402
++
++KEYS = ["MQTT_HOSTNAME", "MQTT_HOST", "MQTT_PORT", "MQTT_USERNAME", "MQTT_USER",
++        "MQTT_PASSWORD", "MQTT_PASS", "MQTT_USE_TLS"]
++
++
++@pytest.fixture(autouse=True)
++def clean_env(monkeypatch):
++    for key in KEYS:
++        monkeypatch.delenv(key, raising=False)
++
++
++def test_missing_host_fails_instead_of_using_localhost():
++    with pytest.raises(ValueError):
++        MQTTClient()
++
++
++def test_reads_primary_env_vars(monkeypatch):
++    monkeypatch.setenv("MQTT_HOSTNAME", "10.0.0.5")
++    monkeypatch.setenv("MQTT_PORT", "1884")
++    monkeypatch.setenv("MQTT_USERNAME", "bike")
++    monkeypatch.setenv("MQTT_PASSWORD", "secret")
++    client = MQTTClient()
++    assert (client.broker_address, client.port, client.username, client.password) == ("10.0.0.5", 1884, "bike", "secret")
++    assert client.use_tls is False
++
++
++def test_legacy_aliases_still_work(monkeypatch):
++    monkeypatch.setenv("MQTT_HOST", "old-host")
++    monkeypatch.setenv("MQTT_USER", "old-user")
++    monkeypatch.setenv("MQTT_PASS", "old-pass")
++    config = load_mqtt_config()
++    assert (config["host"], config["username"], config["password"]) == ("old-host", "old-user", "old-pass")
++
++
++def test_tls_on_for_8883_or_flag(monkeypatch):
++    monkeypatch.setenv("MQTT_HOSTNAME", "cloud")
++    monkeypatch.setenv("MQTT_PORT", "8883")
++    assert MQTTClient().use_tls is True
++    monkeypatch.setenv("MQTT_PORT", "1883")
++    monkeypatch.setenv("MQTT_USE_TLS", "true")
++    assert MQTTClient().use_tls is True
++
++
++def test_explicit_args_override_env(monkeypatch):
++    monkeypatch.setenv("MQTT_HOSTNAME", "env-host")
++    client = MQTTClient("arg-host", port=2000, use_tls=False)
++    assert (client.broker_address, client.port, client.use_tls) == ("arg-host", 2000, False)
+diff --git a/Drivers/smartbike/smartbike.py b/Drivers/smartbike/smartbike.py
+index 0437ac72..d9df46ed 100644
+--- a/Drivers/smartbike/smartbike.py
++++ b/Drivers/smartbike/smartbike.py
+@@ -825,7 +825,7 @@ def main():
+     parser.add_argument('--broker_address', dest='broker_address', type=str, help='The MQTT broker address', default=os.getenv('MQTT_HOSTNAME'))
+     parser.add_argument('--username', dest='username', type=str, help='username', default=os.getenv('MQTT_USERNAME'))
+     parser.add_argument('--password', dest='password', type=str, help='password', default=os.getenv('MQTT_PASSWORD'))
+-    parser.add_argument('--port', dest='port', type=int, help='port', default=os.getenv('MQTT_PORT'))
++    parser.add_argument('--port', dest='port', type=int, help='port', default=int(os.getenv('MQTT_PORT', '1883')))
+ 
+     DEVICE_ID = os.getenv('DEVICE_ID')
+ 
+diff --git a/Drivers/smartbike/wahoo_controller_starter.py b/Drivers/smartbike/wahoo_controller_starter.py
+index 1a01228a..bfe6e685 100644
+--- a/Drivers/smartbike/wahoo_controller_starter.py
++++ b/Drivers/smartbike/wahoo_controller_starter.py
+@@ -19,7 +19,7 @@ parser.add_argument('--mac_address', dest='mac_address', type=str, help="The Wah
+ parser.add_argument('--broker_address', dest='broker_address', type=str, help='The MQTT broker address', default=os.getenv('MQTT_HOSTNAME'))
+ parser.add_argument('--username', dest='username', type=str, help='username', default=os.getenv('MQTT_USERNAME'))
+ parser.add_argument('--password', dest='password', type=str, help='password', default=os.getenv('MQTT_PASSWORD'))
+-parser.add_argument('--port', dest='port', type=int, help='port', default=os.getenv('MQTT_PORT'))
++parser.add_argument('--port', dest='port', type=int, help='port', default=int(os.getenv('MQTT_PORT', '1883')))
+ 
+ DEVICE_ID = os.getenv('DEVICE_ID')
+ 
+diff --git a/mqtt-testing-application/abs.py b/mqtt-testing-application/abs.py
+index e841bed8..e6d683d0 100644
+--- a/mqtt-testing-application/abs.py
++++ b/mqtt-testing-application/abs.py
+@@ -1,11 +1,11 @@
+-import paho.mqtt.client as mqtt
+ import os
++import sys
+ import subprocess
+ 
+-BIKE_ID = os.getenv("BIKEID", "000001")
++sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
++from Drivers.lib.mqtt_client import MQTTClient  # noqa: E402
+ 
+-MQTT_BROKER = "your_mqtt_broker_address"
+-MQTT_PORT = 1883
++BIKE_ID = os.getenv("DEVICE_ID") or os.getenv("BIKEID", "000001")
+ MQTT_TOPIC = f"bike/{BIKE_ID}/startWorkout"
+ 
+ WORKOUT_SCRIPTS = {
+@@ -14,7 +14,7 @@ WORKOUT_SCRIPTS = {
+     "Steady": "start_steady_workout.py"
+ }
+ 
+-def on_connect(client, userdata, flags, rc):
++def on_connect(client, userdata, flags, rc, properties=None):
+     """Callback for when the client connects to the broker."""
+     if rc == 0:
+         print("Connected to MQTT broker")
+@@ -39,12 +39,14 @@ def on_message(client, userdata, msg):
+         print(f"Unrecognized payload: {payload}")
+ 
+ def main():
+-    client = mqtt.Client()
+-    client.on_connect = on_connect
+-    client.on_message = on_message
++    # Broker host/port/login come from .env (MQTT_HOSTNAME, MQTT_PORT, ...)
++    mqtt_client = MQTTClient.from_env()
++    mqtt_client.on_connect = on_connect
++    mqtt_client.on_message = on_message
+ 
+     try:
+-        client.connect(MQTT_BROKER, MQTT_PORT, 60)
++        mqtt_client.setup_mqtt_client()
++        client = mqtt_client.get_client()
+     except Exception as e:
+         print(f"Failed to connect to MQTT broker: {e}")
+         return
+diff --git a/mqtt-testing-application/testing_client.py b/mqtt-testing-application/testing_client.py
+index 87e8571b..11ae1181 100644
+--- a/mqtt-testing-application/testing_client.py
++++ b/mqtt-testing-application/testing_client.py
+@@ -14,7 +14,7 @@ To use:
+     - Define topics you want to subscribe to on SUBSCRIBED_TOPICS
+       *This will clog up the control interface but it will still work
+     - Add/modify any control methods for control topics that are not already present
+-    - Add the MQTT credentials
++    - Set the MQTT_* values in .env
+     - Run
+     - Enter the corrosponding numbers to select control methods
+     - Input values to send to control topics
+@@ -22,13 +22,10 @@ To use:
+ 
+ # ========= USER SETTINGS =========
+ 
+-# MQTT credentials
+-MQTT_HOST = ''
+-MQTT_USER = ''
+-MQTT_PASS = ''
++# MQTT credentials come from .env (MQTT_HOSTNAME, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD)
+ 
+ # Smartbike ID
+-DEVICE_ID = '000001'
++DEVICE_ID = os.getenv('DEVICE_ID', '000001')
+ 
+ # Testing Controls
+ SUBSCRIBED_TOPICS = [] # use '#' for all topics
+@@ -53,7 +50,7 @@ WORKOUT_SELECTOR_TOPIC = "bike/000001/workout"
+ 
+ class MQTT_Controller:
+     def __init__(self):
+-        self.client = MQTTClient(broker_address=MQTT_HOST,username=MQTT_USER,password=MQTT_PASS)
++        self.client = MQTTClient.from_env()
+         self.client.setup_mqtt_client()
+         self.feedback()
+         self._control_loop()
+diff --git a/scripts/start_kickr.sh b/scripts/start_kickr.sh
+index 311f9c3e..41fdaa10 100644
+--- a/scripts/start_kickr.sh
++++ b/scripts/start_kickr.sh
+@@ -1,2 +1,2 @@
+ source ~/.env
+-~/iot/Drivers/kickr_climb_and_smart_trainer/incline_and_resistance_control.py --mac_address ${KICKR_MAC_ADDRESS} --broker_address ${MQTT_HOSTNAME} --username ${MQTT_USERNAME} --password ${MQTT_PASSWORD} --resistance_command_topic bike/${DEVICE_ID}/resistance/control --resistance_report_topic bike/${DEVICE_ID}/resistance --incline_command_topic bike/${DEVICE_ID}/incline/control --incline_report_topic bike/${DEVICE_ID}/incline --speed_report_topic bike/${DEVICE_ID}/speed --cadence_report_topic bike/${DEVICE_ID}/cadence --power_report_topic bike/${DEVICE_ID}/power
++~/iot/Drivers/kickr_climb_and_smart_trainer/incline_and_resistance_control.py --mac_address ${KICKR_MAC_ADDRESS} --broker_address ${MQTT_HOSTNAME} --port ${MQTT_PORT:-1883} --username ${MQTT_USERNAME} --password ${MQTT_PASSWORD} --resistance_command_topic bike/${DEVICE_ID}/resistance/control --resistance_report_topic bike/${DEVICE_ID}/resistance --incline_command_topic bike/${DEVICE_ID}/incline/control --incline_report_topic bike/${DEVICE_ID}/incline --speed_report_topic bike/${DEVICE_ID}/speed --cadence_report_topic bike/${DEVICE_ID}/cadence --power_report_topic bike/${DEVICE_ID}/power

@@ -52,7 +52,7 @@ class WahooDevice(gatt.Device):
         self.setup_mqtt_connection()
 
     def setup_mqtt_connection(self):
-        self.mqtt_client = MQTTClientWithSendingFTMSCommands(self.args.broker_address, self.args.username, self.args.password, self)
+        self.mqtt_client = MQTTClientWithSendingFTMSCommands(self.args.broker_address, self.args.username, self.args.password, self, port=self.args.port)
         self.mqtt_client.setup_mqtt_client()
 
         # subscribe to both resistance and incline command topics

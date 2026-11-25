@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import sys
 import time
 import paho.mqtt.client as paho
@@ -32,13 +33,48 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 sys.excepthook = handle_exception
 
 # this is a MQTT client that is able to publish to and subscribe from MQTT topics
+def _env(*names, default=None):
+    """Return the first non-empty environment variable from names."""
+    for name in names:
+        value = os.getenv(name)
+        if value:
+            return value
+    return default
+
+
+def load_mqtt_config():
+    """Read broker settings from the environment (.env).
+
+    Primary names: MQTT_HOSTNAME, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD, MQTT_USE_TLS.
+    Legacy aliases MQTT_HOST, MQTT_USER, MQTT_PASS are still accepted.
+    """
+    host = _env("MQTT_HOSTNAME", "MQTT_HOST")
+    port = int(_env("MQTT_PORT", default="1883"))
+    username = _env("MQTT_USERNAME", "MQTT_USER")
+    password = _env("MQTT_PASSWORD", "MQTT_PASS")
+    use_tls = _env("MQTT_USE_TLS", default="").lower() in ("true", "1", "yes") or port == 8883
+    return {"host": host, "port": port, "username": username,
+            "password": password, "use_tls": use_tls}
+
+
+# this is a MQTT client that is able to publish to and subscribe from MQTT topics
 class MQTTClient:
-    def __init__(self, broker_address, username, password, port=1883):
-        self.broker_address = broker_address
-        self.username = username
-        self.password = password
-        self.port = port
+    def __init__(self, broker_address=None, username=None, password=None, port=None, use_tls=None):
+        # Anything not passed in falls back to the environment, so callers never hard-code broker details
+        config = load_mqtt_config()
+        self.broker_address = broker_address or config["host"]
+        self.username = username or config["username"]
+        self.password = password or config["password"]
+        self.port = int(port) if port else config["port"]
+        self.use_tls = config["use_tls"] if use_tls is None else use_tls
         self.client = None
+
+        if not self.broker_address:
+            raise ValueError("MQTT broker host not set. Set MQTT_HOSTNAME in .env or pass --broker_address.")
+
+    @classmethod
+    def from_env(cls):
+        return cls()
 
     def get_client(self):
         return self.client
@@ -50,11 +86,13 @@ class MQTTClient:
         self.client = paho.Client(client_id="", userdata=None, protocol=paho.MQTTv5)
         self.client.on_connect = self.on_connect
 
-        # enable TLS for secure connection
-        self.client.tls_set(tls_version=paho.ssl.PROTOCOL_TLS)
-        # set username and password
-        self.client.username_pw_set(self.username, self.password)
-        # Default port 1883
+        # enable TLS only when configured (MQTT_USE_TLS=true or port 8883)
+        if self.use_tls:
+            self.client.tls_set(tls_version=paho.ssl.PROTOCOL_TLS)
+        # only send a login if one is configured
+        if self.username:
+            self.client.username_pw_set(self.username, self.password)
+        logger.info(f"Connecting to MQTT broker {self.broker_address}:{self.port} (TLS={self.use_tls})")
         self.client.connect(self.broker_address, self.port)
 
         # setting callbacks, use separate functions like above for better visibility
@@ -104,12 +142,7 @@ class MQTTClient:
             self.client.reconnect()
 
 if __name__ == '__main__':
-
-    MQTT_HOST = ''
-    MQTT_USER = ''
-    MQTT_PASS = ''
-    MQTT_PORT = 1883
-
-    client = MQTTClient(MQTT_HOST, MQTT_USER, MQTT_PASS, MQTT_PORT)
+    # quick connection test using the values in .env
+    client = MQTTClient.from_env()
     client.setup_mqtt_client()
     client.loop_forever()

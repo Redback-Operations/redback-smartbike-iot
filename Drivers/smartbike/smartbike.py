@@ -825,7 +825,7 @@ def main():
     parser.add_argument('--broker_address', dest='broker_address', type=str, help='The MQTT broker address', default=os.getenv('MQTT_HOSTNAME'))
     parser.add_argument('--username', dest='username', type=str, help='username', default=os.getenv('MQTT_USERNAME'))
     parser.add_argument('--password', dest='password', type=str, help='password', default=os.getenv('MQTT_PASSWORD'))
-    parser.add_argument('--port', dest='port', type=int, help='port', default=os.getenv('MQTT_PORT'))
+    parser.add_argument('--port', dest='port', type=int, help='port', default=int(os.getenv('MQTT_PORT', '1883')))
 
     DEVICE_ID = os.getenv('DEVICE_ID')
 
@@ -870,4 +870,4 @@ def main():
         sys.exit(0)
 
 if __name__ == '__main__':
-    main()
+    main()
